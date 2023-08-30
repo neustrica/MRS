@@ -5,7 +5,9 @@ __pycache__/
 
 # C extensions
 *.so
-
+authorization.py
+dynamo_get_table.py
+Bot.py
 # Distribution / packaging
 .Python
 build/

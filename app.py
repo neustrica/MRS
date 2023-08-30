@@ -1,12 +1,13 @@
 import re
 import csv
 import asyncio
-from aiogram import Bot, Dispatcher, types
+from aiogram import Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from decimal import Decimal
 import authorization
 import dynamo_get_table
 from queue import Queue
+from Bot import bot
 
 
 sp = authorization.authorize()
@@ -50,7 +51,6 @@ def save_rating(user_id, track, rating):
 
 recs = []
 
-bot = Bot('5998646973:AAEa_07cm84iuYBswQdSEDO4FA6n4Ye7zFM')
 dp = Dispatcher(bot, storage=MemoryStorage())
 # Хэндлер на команду /start    
 @dp.message_handler(commands=['start'])
