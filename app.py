@@ -50,7 +50,7 @@ def save_rating(user_id, track, rating):
 
 recs = []
 
-bot = Bot('5998646973:AAEa_07cm84iuYBswQdSEDO4FA6n4Ye7zFM')
+bot = Bot('')
 dp = Dispatcher(bot, storage=MemoryStorage())
 # Хэндлер на команду /start    
 @dp.message_handler(commands=['start'])
