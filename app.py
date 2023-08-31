@@ -1,12 +1,10 @@
-import re
 import csv
 import asyncio
-from aiogram import Dispatcher, types
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram import Dispatcher
 from decimal import Decimal
 import authorization
 import dynamo_get_table
-from queue import Queue
+import telegram_bot
 from Bot import bot
 
 
@@ -43,112 +41,34 @@ def recommend(track_ids, n_recs=5):
 
     return sorted_data
 
+def build_matrix():
+  data = []
+
+  with open('ratings.csv', 'r') as f:
+      reader = csv.reader(f)
+      for row in reader:
+        user_id, track_id, rating = row
+        data.append(row)
+  users = set([row[0] for row in data]) 
+  tracks = set([row[1] for row in data])
+  matrix = [[0 for t in tracks] for u in users]
+  for row in data:
+    user_id, track_id, rating = row
+    
+    user_idx = list(users).index(user_id)
+    track_idx = list(tracks).index(track_id)
+
+    matrix[user_idx][track_idx] = rating
+  return matrix
+
   # Сохранение оценки в CSV
 def save_rating(user_id, track, rating):
-  with open('ratings.csv', 'a') as f: 
-    writer = csv.writer(f)
-    writer.writerow([user_id, track['id'], rating])
+    with open('ratings.csv', 'a') as f: 
+      writer = csv.writer(f)
+      writer.writerow([user_id, track['id'], rating])
 
-recs = []
+dp = Dispatcher(bot)
+dp = telegram_bot.start(bot, dp)
 
-dp = Dispatcher(bot, storage=MemoryStorage())
-# Хэндлер на команду /start    
-@dp.message_handler(commands=['start'])
-async def cmd_start(message: types.Message):
-
-  buttons = [
-    types.KeyboardButton(text="Получить рекомендации"),
-    types.KeyboardButton(text="Оценить трек")
-  ]
-  
-  keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-  keyboard.add(*buttons)
-  
-  await message.reply("Выберите действие", reply_markup=keyboard)
-current_track = None
-rated_tracks = []
-
-@dp.message_handler(text="Получить рекомендации")
-async def cmd_recommend(message: types.Message):
-    buttons = [
-    types.InlineKeyboardButton(text="На основе id", callback_data="get_recs"), 
-    types.InlineKeyboardButton(text="На основе оценок", callback_data="by_rating")
-    ]
-  
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(*buttons)
-    await message.reply("Как именно", reply_markup=keyboard)
-
-@dp.callback_query_handler(text="get_recs")
-async def get_recs(callback: types.CallbackQuery):
-  
-  await callback.message.reply("Пришли ID треков через запятую")
-
-@dp.message_handler(text="Оценить трек")
-async def rate_tracks(message):
-
-    global current_track
-    global msg
-
-    if not current_track:  
-        current_track = recs[0]
-
-    buttons = [
-        types.InlineKeyboardButton(text, callback_data=f"rate_{text}") 
-        for text in ["1", "2", "3", "4", "5"]
-    ]
-
-    keyboard = types.InlineKeyboardMarkup().add(*buttons)
-
-    msg = await message.reply(f"Оцените трек: {current_track['track_name']}", reply_markup=keyboard) 
-
-@dp.callback_query_handler(lambda c: c.data.startswith("rate_"))
-async def rate_track(callback: types.CallbackQuery):
-
-    global current_track
-    global rated_tracks
-    global msg
-
-    # сохраняем рейтинг
-    rating = int(callback.data.split("_")[1])
-
-    save_rating(callback.from_user.id, current_track, rating) 
-
-    rated_tracks.append(current_track['id'])  
-    
-    buttons = [
-        types.InlineKeyboardButton(text, callback_data=f"rate_{text}") 
-        for text in ["1", "2", "3", "4", "5"]
-    ]
-    keyboard = types.InlineKeyboardMarkup().add(*buttons)
-          
-    current_index = recs.index(current_track)
-    if current_index < len(recs) - 1:
-        current_track = recs[current_index + 1]
-        await msg.edit_text(f"Оцените трек: {current_track['track_name']}")
-        await msg.edit_reply_markup(reply_markup=keyboard)
-
-    else:
-        await callback.message.reply("Оценка завершена! /start")
-
-
-TRACK_ID_RE = re.compile(r'[a-zA-Z0-9]{22}(?:[,][a-zA-Z0-9]{22})*')  
-@dp.message_handler()
-async def process_tracks(message: types.Message):
-  if TRACK_ID_RE.match(message.text):
-    tracks = message.text.split(", ")
-    global recs
-
-    recs = recommend(tracks) 
-    ans = "Рекомендации для пользователя {}:"
-
-    for track in recs:
-        ans += "\n{} - {}".format(track['artist_name'], track['track_name'])
-
-    await message.answer(ans)
-  else:
-    await message.reply("Неверный формат ID")  
-
-
-if __name__ == '__main__':
-    asyncio.run(dp.start_polling())
+if __name__ == "__main__":
+  asyncio.run(dp.start_polling())
