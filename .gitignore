@@ -9,6 +9,7 @@ __pycache__/
 authorization.py
 dynamo_get_table.py
 Bot.py
+requirements.txt
 
 # Distribution / packaging
 .Python

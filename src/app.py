@@ -1,10 +1,12 @@
 import csv
 import asyncio
+import numpy as np
 from aiogram import Dispatcher
 from decimal import Decimal
-import authorization
-import dynamo_get_table
-import telegram_bot
+from scipy import spatial
+import authorization as authorization
+import dynamo_get_table as dynamo_get_table
+import telegram_bot as telegram_bot
 from Bot import bot
 
 
@@ -45,27 +47,50 @@ def build_matrix():
   data = []
 
   with open('ratings.csv', 'r') as f:
-      reader = csv.reader(f)
-      for row in reader:
-        user_id, track_id, rating = row
-        data.append(row)
+    reader = csv.reader(f)
+    for row in reader:
+      user_id, track_id, rating = row
+      data.append(row)
   users = set([row[0] for row in data]) 
   tracks = set([row[1] for row in data])
   matrix = [[0 for t in tracks] for u in users]
   for row in data:
-    user_id, track_id, rating = row
-    
+    user_id, track_id, rating = row    
     user_idx = list(users).index(user_id)
     track_idx = list(tracks).index(track_id)
-
     matrix[user_idx][track_idx] = rating
   return matrix
 
   # Сохранение оценки в CSV
 def save_rating(user_id, track, rating):
-    with open('ratings.csv', 'a') as f: 
-      writer = csv.writer(f)
-      writer.writerow([user_id, track['id'], rating])
+  with open('ratings.csv', 'a') as f: 
+    writer = csv.writer(f)
+    writer.writerow([user_id, track['id'], rating])
+matrix = build_matrix()
+
+def cosine():
+  # вычисляем косинусную схожесть между векторами пользователей 
+  cosine_similarities = 1 - spatial.distance.cdist(matrix, matrix, 'cosine')
+
+  # берем id текущего пользователя, например, 2
+  user_id = 2
+
+  # находим топ-3 похожих пользователей
+  similar_user_ids = np.argsort(cosine_similarities[user_id])[-3:] 
+
+  # треки, которые они оценили, но текущий пользователь нет 
+  recs = set()
+  for id in similar_user_ids:
+    user_scores = matrix[id]
+    for i in range(len(user_scores)):
+      if user_scores[i] > 0 and matrix[user_id][i] == 0:
+        recs.add(i)
+
+  # сортируем треки по средней оценке и берем топ  
+  top_recs = sorted(recs, key=lambda x: np.mean(np.take(matrix, x)), reverse=True)[:5]
+
+  return top_recs
+  # [3, 2, 1, 0] - индексы рекомендуемых треков
 
 dp = Dispatcher(bot)
 dp = telegram_bot.start(bot, dp)
