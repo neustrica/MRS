@@ -5,7 +5,7 @@
 # Import modules
 import sys
 sys.path.append("../spotify_api_web_app")
-import authorization
+import src.authorization as authorization
 import pandas as pd
 from tqdm import tqdm
 import time
