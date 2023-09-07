@@ -1,43 +1,76 @@
 import re
-
+import os
 from aiogram import types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 recs = []
 current_track = None
 rated_tracks = []
 def start(bot, dp):
-    
-    # Хэндлер на команду /start    
+
     @dp.message_handler(commands=['start'])
     async def cmd_start(message: types.Message):
-
         buttons = [
-            types.KeyboardButton(text="Получить рекомендации"),
-            types.KeyboardButton(text="Оценить трек")
+            types.KeyboardButton(text="Получить рекомендации"), 
+            types.KeyboardButton(text="Найти трек")
         ]
-        
-        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+
+        keyboard = types.ReplyKeyboardMarkup()
         keyboard.add(*buttons)
-    
+
         await message.reply("Выберите действие", reply_markup=keyboard)
 
+    @dp.message_handler(text="Найти трек")
+    async def find_track(message: types.Message):
+        await message.reply("Введите название трека")
 
-    @dp.message_handler(text="Получить рекомендации")
-    async def cmd_recommend(message: types.Message):
+        @dp.message_handler()
+        async def search_track(message: types.Message):
+            await message.reply("Подождите, ищем трек")
+            from app import search_track, youtube_search, download_audio
+            track = search_track(message.text)
+
+            if track:
+                await message.reply("Ищеи видео")
+                youtube_query = f"{track['name']} {track['artist']}"
+                video = youtube_search(youtube_query)
+                await message.reply("Скачиваем")
+                url = f"https://youtu.be/{video['id']['videoId']}"
+                audio_path = download_audio(url)
+                await bot.send_message(chat_id=message.chat.id, text = "отправляю")
+                btn = InlineKeyboardButton("Оценить трек", callback_data="rate")
+                keyboard = InlineKeyboardMarkup().add(btn)
+                await bot.send_audio(chat_id=message.chat.id, audio=open(audio_path, 'rb'), reply_markup=keyboard)
+                os.remove(audio_path)
+            else:
+                await message.reply("Трек не найден")
+
+    @bot.callback_query_handler(func=lambda call: call.data == "rate")
+    async def callback_rate(call):
         buttons = [
-        types.InlineKeyboardButton(text="На основе id", callback_data="get_recs"), 
-        types.InlineKeyboardButton(text="На основе оценок", callback_data="by_rating")
+            InlineKeyboardButton("1", callback_data=str(1)),
+            InlineKeyboardButton("2", callback_data=str(2)),
+            InlineKeyboardButton("3", callback_data=str(3)),
+            InlineKeyboardButton("4", callback_data=str(4)),
+            InlineKeyboardButton("5", callback_data=str(5))
         ]
-    
-        keyboard = types.InlineKeyboardMarkup()
-        keyboard.add(*buttons)
-        await message.reply("Как именно", reply_markup=keyboard)
+        
+        await bot.edit_message_reply_markup(
+            chat_id=call.message.chat.id, 
+            message_id=call.message.message_id,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
 
-    @dp.callback_query_handler(text="get_recs")
-    async def get_recs(callback: types.CallbackQuery):
-    
-        await callback.message.reply("Пришли ID треков через запятую")
+    @bot.callback_query_handler(func=lambda call: call.data in ["1", "2", "3", "4", "5"])  
+    async def process_rate(callback: types.CallbackQuery):
+        user_id = callback.from_user.id
+        track_id = callback.data # id трека
+        rating = int(callback.data)
+        from database import save_track_rating
+        save_track_rating(user_id, track_id, rating)
+
+        await callback.answer()
 
     @dp.message_handler(text="Оценить трек")
     async def rate_tracks(message):
@@ -87,20 +120,3 @@ def start(bot, dp):
             await callback.message.reply("Оценка завершена! /start")
 
 
-    @dp.message_handler()
-    async def process_tracks(message: types.Message):
-        TRACK_ID_RE = re.compile(r'[a-zA-Z0-9]{22}(?:[,][a-zA-Z0-9]{22})*')
-        if TRACK_ID_RE.match(message.text):
-            tracks = message.text.split(", ")
-            global recs
-            from src.app import recommend
-            recs = recommend(tracks) 
-            ans = "Рекомендации для пользователя:"
-
-            for track in recs:
-                ans += "\n{} - {}".format(track['artist_name'], track['track_name'], "https://spotify.com/track")
-
-            await message.answer(ans)
-        else:
-            await message.reply("Неверный формат ID")  
-    return dp
