@@ -11,7 +11,19 @@ import os
 
 
 sp = authorize()
-
+def get_track_info(track_id):
+  track_info = sp.track(track_id)
+  track_name = track_info.name
+  artists = track_info.artists
+  artist_names = [artist.name for artist in artists]
+      
+  # Создание словаря с информацией о треке
+  track_data = {
+    'track_name': track_name,
+    'artist_names': artist_names,
+    'track_id': track_id
+  }
+  return track_data
 
 def search_track(query):
 
@@ -45,7 +57,6 @@ def youtube_search(query):
   
   return response['items'][0]
 
-
 def download_audio(url):
 
   ydl_opts = {
@@ -67,42 +78,35 @@ def download_audio(url):
 
   return f'{title}.mp3'
 
-# dp = Dispatcher(bot)
-# start(bot, dp)
-# if __name__ == '__main__':
-#   asyncio.run(dp.start_polling())
-
 # Функция для получения похожих пользователей
-def find_similar_users(user_id, user_sim, k=5):
-  scores = list(enumerate(user_sim[user_id]))
-  top_k = sorted(scores, key=lambda x: x[1], reverse=True)[1:k+1] 
-  return [i[0] for i in top_k]
+def find_similar_users(df, user_id, user_sim, k=5):
+  user_index = df[df['user_id'] == user_id].index[0]
+  user_sim_scores = user_sim[user_index]
+  top_similar_users = user_sim_scores.argsort()[::-1][:k]
+  similar_user_ids = df.iloc[top_similar_users]['user_id'].tolist()
+  return similar_user_ids
 
 # Функция для генерации рекомендаций
 def generate_recs(user_id, k=5):
   # Загружаем данные из БД 
   df = get_ratings()
   top_tracks = get_top_rated_tracks(user_id=user_id)
-  print("TOP TRACKS")
-  print(top_tracks)
+
   similar_tracks = []
   for track in top_tracks:
     similar_tracks += get_similar(track) 
-  print("SIMILAR TRACKS")
-  print(similar_tracks)
   user_id = int(user_id)
+
   # Преобразуем в матрицу пользователей-треков
   pivot_table = df.pivot(index='user_id', columns='track_id', values='rating').fillna(0)
   # Вычисляем матрицу сходства    
   user_sim = cosine_similarity(pivot_table)
   # Находим похожих пользователей
-  similar_users = find_similar_users(user_id, user_sim, k)  
+  similar_users = find_similar_users(df, user_id, user_sim, k)  
   # Среднее рейтингов похожих пользователей 
   scores = pivot_table.loc[similar_users].mean(axis=0)
   # Сортируем и возвращаем топ-5
   scores = scores.sort_values(ascending=False)[:5].index.values
-  print("SCORES")
-  print(scores)
   # Сортируем и сохраняем рекомендации в словарь с популярностью
   recommendations = {}
   for track in scores:
@@ -120,18 +124,11 @@ def generate_recs(user_id, k=5):
   recs = []
 
   for track_id, popularity in top_recommendations:
-      track_info = sp.track(track_id)
-      track_name = track_info.name
-      artists = track_info.artists
-      artist_names = [artist.name for artist in artists]
-      
-      # Создание словаря с информацией о треке
-      track_data = {
-          'track_name': track_name,
-          'artist_names': artist_names,
-          'track_id': track_id
-      }
-      
+      track_data = get_track_info(track_id)
       # Добавление информации в список top_recommendations
       recs.append(track_data)
   return recs
+dp = Dispatcher(bot)
+start(bot, dp)
+if __name__ == '__main__':
+  asyncio.run(dp.start_polling())
