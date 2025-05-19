@@ -11,7 +11,7 @@ DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5433") 
 DB_NAME = os.getenv("DB_NAME", "music_recs_db") 
 DB_USER = os.getenv("DB_USER", "postgres") 
-DB_PASSWORD = os.getenv("DB_PASSWORD", ".q1w2e3r4")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 def get_db_connection():
     """Устанавливает соединение с базой данных PostgreSQL."""
