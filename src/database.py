@@ -4,18 +4,18 @@ import pandas as pd
 import logging
 import os
 
+# Импортируем параметры подключения к БД из authorization.py
+from authorization import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+
 logger = logging.getLogger(__name__)
 
-# --- Параметры подключения к PostgreSQL ---
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5433") 
-DB_NAME = os.getenv("DB_NAME", "music_recs_db") 
-DB_USER = os.getenv("DB_USER", "postgres") 
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+# --- Параметры подключения к PostgreSQL УДАЛЕНЫ ОТСЮДА ---
+# Они теперь импортируются из authorization.py
 
 def get_db_connection():
     """Устанавливает соединение с базой данных PostgreSQL."""
     try:
+        # Используем импортированные переменные
         conn = psycopg2.connect(
             host=DB_HOST,
             port=DB_PORT,
@@ -28,7 +28,7 @@ def get_db_connection():
         logger.error(f"Ошибка подключения к PostgreSQL: {e}")
         logger.error(f"Проверьте, что сервер PostgreSQL запущен и доступен по адресу {DB_HOST}:{DB_PORT}.")
         logger.error(f"Убедитесь, что база данных '{DB_NAME}' существует, и у пользователя '{DB_USER}' есть права на подключение.")
-        logger.error(f"Также проверьте правильность пароля.")
+        logger.error(f"Также проверьте правильность пароля (задан в authorization.py или переменных окружения).")
         raise
     except Exception as e: 
         logger.error(f"Непредвиденная ошибка при подключении к PostgreSQL: {e}")
@@ -40,7 +40,6 @@ def create_tables_if_not_exists():
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-            # track_id теперь хранит Spotify ID
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS track_ratings (
                     user_id BIGINT NOT NULL,
@@ -80,7 +79,6 @@ def create_tables_if_not_exists():
             conn.close()
 
 def save_track_rating(user_id: int, track_spotify_id: str, rating: int):
-    """Сохраняет оценку трека, используя Spotify ID."""
     logger.info(f"Сохранение оценки: user_id={user_id}, track_spotify_id='{track_spotify_id}', rating={rating}")
     conn = None
     try:
@@ -104,7 +102,6 @@ def save_track_rating(user_id: int, track_spotify_id: str, rating: int):
             conn.close()
 
 def save_listened_track(user_id: int, track_spotify_id: str):
-    """Сохраняет информацию о прослушанном треке (Spotify ID)."""
     logger.info(f"Сохранение прослушанного трека: user_id={user_id}, track_spotify_id='{track_spotify_id}'")
     conn = None
     try:
@@ -126,7 +123,6 @@ def save_listened_track(user_id: int, track_spotify_id: str):
             conn.close()
 
 def get_ratings() -> pd.DataFrame:
-    """Запрос всех оценок из БД PostgreSQL. track_id является Spotify ID."""
     logger.info("Запрос всех оценок (с Spotify ID) из БД PostgreSQL.")
     conn = None
     try:
@@ -149,7 +145,6 @@ def get_ratings() -> pd.DataFrame:
             conn.close()
 
 def get_top_rated_tracks(user_id: int, min_rating: int = 4) -> list:
-    """Возвращает список Spotify ID треков, оцененных пользователем на min_rating или выше."""
     logger.info(f"Запрос высоко оцененных треков (Spotify ID) для user_id={user_id} (min_rating={min_rating}) из PostgreSQL.")
     conn = None
     track_spotify_ids = []
@@ -162,7 +157,7 @@ def get_top_rated_tracks(user_id: int, min_rating: int = 4) -> list:
                 ORDER BY rated_at DESC
             ''', (user_id, min_rating))
             rows = cursor.fetchall()
-            track_spotify_ids = [row['track_id'] for row in rows] # Это будут Spotify ID
+            track_spotify_ids = [row['track_id'] for row in rows] 
             logger.info(f"Найдено {len(track_spotify_ids)} высоко оцененных треков (Spotify ID) в PostgreSQL.")
     except psycopg2.Error as e:
         logger.error(f"Ошибка при запросе высоко оцененных треков (Spotify ID) из PostgreSQL: {e}")
@@ -172,7 +167,6 @@ def get_top_rated_tracks(user_id: int, min_rating: int = 4) -> list:
     return track_spotify_ids
 
 def check_user_has_ratings(user_id: int) -> bool:
-    """Проверяет, есть ли у пользователя хотя бы одна оценка."""
     logger.info(f"Проверка наличия оценок у user_id={user_id} в PostgreSQL.")
     conn = None
     count = 0
@@ -194,8 +188,7 @@ def check_user_has_ratings(user_id: int) -> bool:
 def add_user_mapping(user_id: int) -> int:
     logger.info(f"Добавление/получение user_mapping для user_id={user_id} в PostgreSQL.")
     conn = None
-    user_num = -1  # По умолчанию -1 (ошибка или не найден)
-
+    user_num = -1 
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
@@ -212,29 +205,20 @@ def add_user_mapping(user_id: int) -> int:
                     conn.commit() 
                     logger.info(f"Новый пользователь {user_id} добавлен с user_num={user_num}.")
                 else:
-                    # Этот случай маловероятен, если INSERT не вызвал исключение,
-                    # но на всякий случай обрабатываем.
                     logger.error(f"Не удалось вставить нового пользователя {user_id} и получить user_num (RETURNING был пуст).")
-                    if conn: # Соединение должно быть установлено на этом этапе
-                        conn.rollback()
-                    # user_num уже -1, так что дополнительно присваивать не нужно
-    
+                    if conn: conn.rollback()
     except psycopg2.Error as e:
         logger.error(f"Ошибка psycopg2 при добавлении/получении user_mapping для user_id={user_id}: {e}")
-        if conn:
-            conn.rollback() # Откатываем транзакцию при ошибке psycopg2
-        user_num = -1 # Убеждаемся, что возвращается индикатор ошибки
-    except Exception as e: # Ловим любые другие неожиданные ошибки
+        if conn: conn.rollback() 
+        user_num = -1 
+    except Exception as e: 
         logger.error(f"Неожиданная ошибка при добавлении/получении user_mapping для user_id={user_id}: {e}", exc_info=True)
-        if conn: # Если соединение было установлено до этой другой ошибки
-            conn.rollback()
-        user_num = -1 # Убеждаемся, что возвращается индикатор ошибки
+        if conn: conn.rollback()
+        user_num = -1 
     finally:
         if conn:
             conn.close()
-            
     return user_num
-
 
 def get_user_to_idx_map() -> dict:
     logger.info("Запрос сопоставления user_id -> user_num из PostgreSQL.")
@@ -282,10 +266,9 @@ if __name__ == "__main__":
         logger.info("Создание таблиц (если не существуют)...")
         create_tables_if_not_exists()
         logger.info("Проверка/создание таблиц PostgreSQL (с Spotify ID) завершено успешно.")
-
     except psycopg2.OperationalError as e:
         logger.error(f"КРИТИЧЕСКАЯ ОШИБКА ПОДКЛЮЧЕНИЯ к PostgreSQL: {e}")
-        logger.error("ПОЖАЛУЙСТА, ПРОВЕРЬТЕ ПАРАМЕТРЫ ПОДКЛЮЧЕНИЯ И СОСТОЯНИЕ СЕРВЕРА/БД, как указано в комментариях выше.")
+        logger.error("ПОЖАЛУЙСТА, ПРОВЕРЬТЕ ПАРАМЕТРЫ ПОДКЛЮЧЕНИЯ (в authorization.py или переменных окружения) И СОСТОЯНИЕ СЕРВЕРА/БД.")
     except Exception as e:
         logger.error(f"Не удалось инициализировать базу данных PostgreSQL (с Spotify ID): {e}")
 else:
