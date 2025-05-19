@@ -4,13 +4,9 @@ import pandas as pd
 import logging
 import os
 
-# Импортируем параметры подключения к БД из authorization.py
 from authorization import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
 
 logger = logging.getLogger(__name__)
-
-# --- Параметры подключения к PostgreSQL УДАЛЕНЫ ОТСЮДА ---
-# Они теперь импортируются из authorization.py
 
 def get_db_connection():
     """Устанавливает соединение с базой данных PostgreSQL."""
